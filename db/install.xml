@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<XMLDB PATH="mod/assign/submission/remotecheck/db" VERSION="2025100801" COMMENT="Remote Check submission plugin">
+    <TABLES>
+        <TABLE NAME="assignsubmission_remotecheck" COMMENT="Stores student input and validation results" NEXT="assignsubmission_remotecheck_errs">
+            <FIELDS>
+                <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+                <FIELD NAME="assignment" TYPE="int" LENGTH="10" NOTNULL="true" UNSIGNED="true"/>
+                <FIELD NAME="submission" TYPE="int" LENGTH="10" NOTNULL="true" UNSIGNED="true"/>
+                <FIELD NAME="buildingid" TYPE="int" LENGTH="10" NOTNULL="false"/>
+                <FIELD NAME="buildingaddress" TYPE="char" LENGTH="255" NOTNULL="false"/>
+
+                <!-- Numeric parameters: precision and scale split -->
+                <FIELD NAME="param1" TYPE="number" LENGTH="10" DECIMALS="5" NOTNULL="false"/>
+                <FIELD NAME="param2" TYPE="number" LENGTH="10" DECIMALS="5" NOTNULL="false"/>
+                <FIELD NAME="param3" TYPE="number" LENGTH="10" DECIMALS="5" NOTNULL="false"/>
+                <FIELD NAME="param4" TYPE="number" LENGTH="10" DECIMALS="5" NOTNULL="false"/>
+                <FIELD NAME="param5" TYPE="number" LENGTH="10" DECIMALS="5" NOTNULL="false"/>
+                <FIELD NAME="param6" TYPE="number" LENGTH="10" DECIMALS="5" NOTNULL="false"/>
+                <FIELD NAME="param7" TYPE="number" LENGTH="10" DECIMALS="5" NOTNULL="false"/>
+                <FIELD NAME="param8" TYPE="number" LENGTH="10" DECIMALS="5" NOTNULL="false"/>
+                <FIELD NAME="param9" TYPE="number" LENGTH="10" DECIMALS="5" NOTNULL="false"/>
+
+                <FIELD NAME="studentresult" TYPE="number" LENGTH="12" DECIMALS="5" NOTNULL="false"/>
+                <FIELD NAME="isvalid" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="0"/>
+                <FIELD NAME="validationjson" TYPE="text" NOTNULL="false"/>
+                <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true"/>
+                <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true"/>
+            </FIELDS>
+            <KEYS>
+                <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+                <KEY NAME="submissionfk" TYPE="foreign" FIELDS="submission" REFTABLE="assign_submission" REFFIELDS="id"/>
+            </KEYS>
+        </TABLE>
+
+        <TABLE NAME="assignsubmission_remotecheck_errs" COMMENT="Optional: store detailed validation errors per param">
+            <FIELDS>
+                <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+                <FIELD NAME="remotecheckid" TYPE="int" LENGTH="10" NOTNULL="true"/>
+                <FIELD NAME="fieldname" TYPE="char" LENGTH="64" NOTNULL="true"/>
+                <FIELD NAME="expected" TYPE="char" LENGTH="255" NOTNULL="false"/>
+                <FIELD NAME="actual" TYPE="char" LENGTH="255" NOTNULL="false"/>
+                <FIELD NAME="tolerance" TYPE="char" LENGTH="64" NOTNULL="false"/>
+                <FIELD NAME="message" TYPE="text" NOTNULL="false"/>
+            </FIELDS>
+            <KEYS>
+                <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+            </KEYS>
+        </TABLE>
+    </TABLES>
+</XMLDB>
