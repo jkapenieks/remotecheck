@@ -55,3 +55,8 @@ $string['id'] = 'ID';
 
 $string['table'] = 'Table name';
 $string['table_help'] = 'Name of the remote table to use for this assignment. If left blank, the site-level default is used.';
+
+
+$string['randomitem'] = 'Random building selection';
+$string['randomitem_desc'] = 'If enabled, a building is assigned automatically and the selector is disabled on the student form.';
+$string['item'] = 'Selected item';
