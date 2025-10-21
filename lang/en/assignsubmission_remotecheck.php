@@ -60,3 +60,6 @@ $string['table_help'] = 'Name of the remote table to use for this assignment. If
 $string['randomitem'] = 'Random building selection';
 $string['randomitem_desc'] = 'If enabled, a building is assigned automatically and the selector is disabled on the student form.';
 $string['item'] = 'Selected item';
+$string['vs'] = 'vs';
+$string['deltaallowed'] = 'Δ={$a->delta} ≤ {$a->allowed}';
+$string['remotecompare'] = 'Remote comparison';

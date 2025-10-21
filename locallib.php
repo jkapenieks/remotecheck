@@ -125,6 +125,7 @@ class assign_submission_remotecheck extends assign_submission_plugin {
         if (!$this->is_enabled()) {
             return false;
         }
+        
 
         $override = $this->repo_override();
         $repo     = new remote_repository($override);
@@ -203,6 +204,10 @@ class assign_submission_remotecheck extends assign_submission_plugin {
 
     public function save(stdClass $submission, stdClass $data): bool {
         global $DB;
+        // Ignore edits while locked (submitted for grading).
+        if ($this->is_locked($submission)) {
+            return true;
+        }
 
         if (!$this->is_enabled()) {
             return true;
@@ -355,17 +360,167 @@ class assign_submission_remotecheck extends assign_submission_plugin {
         return $out;
     }
 
-    public function view_summary(stdClass $submission, &$showviewlink) {
+    // public function view_summary(stdClass $submission, &$showviewlink) {
+    //     global $DB;
+    //     $showviewlink = false;
+
+    //     // Hide text until the student has submitted.
+    //     $requirebutton = !empty($this->assignment->get_instance()->submissiondrafts);
+    //     if (!$requirebutton || ($submission->status ?? '') !== 'submitted') {
+    //         return ''; // Render nothing.
+    //     }
+
+    //     $rec = $DB->get_record('assignsubmission_remotecheck', ['submission' => $submission->id]);
+    //     if (!$rec) {
+    //         return get_string('nosubmission', 'assignsubmission_remotecheck');
+    //     }
+    //     $status = $rec->isvalid ? get_string('valid', 'assignsubmission_remotecheck') : get_string('invalid', 'assignsubmission_remotecheck');
+    //     return get_string('summary', 'assignsubmission_remotecheck', $status);
+
+    // }
+
+public function view_summary(stdClass $submission, &$showviewlink) {
         global $DB;
 
         $showviewlink = false;
-        $rec = $DB->get_record('assignsubmission_remotecheck', ['submission' => $submission->id]);
-        if (!$rec) {
-            return get_string('nosubmission', 'assignsubmission_remotecheck');
+
+        $requirebutton = !empty($this->assignment->get_instance()->submissiondrafts);
+        if (!$requirebutton || ($submission->status ?? '') !== 'submitted') {
+            return ''; // Render nothing.
         }
-        $status = $rec->isvalid ? get_string('valid', 'assignsubmission_remotecheck') : get_string('invalid', 'assignsubmission_remotecheck');
-        return get_string('summary', 'assignsubmission_remotecheck', $status);
+
+        // Fetch the plugin row for this attempt.
+        $rec = $DB->get_record('assignsubmission_remotecheck', ['submission' => $submission->id], '*', IGNORE_MISSING);
+        if (!$rec) {
+            return 'N/A';
+        }
+
+        // Decode JSON payload (built by validate_submission()).
+        $val = json_decode($rec->validationjson ?? '', true);
+        if (!is_array($val)) {
+            $status = !empty($rec->isvalid)
+                ? get_string('valid', 'assignsubmission_remotecheck')
+                : get_string('invalid', 'assignsubmission_remotecheck');
+            return get_string('summary', 'assignsubmission_remotecheck', $status);
+        }
+
+        // --- Build label map: p1..p9 -> human-readable label from assignment config.
+        $paramlabels = [];
+        for ($i = 1; $i <= 9; $i++) {
+            $lbl = trim((string)$this->get_config('label' . $i));
+            if ($lbl === '') {
+                // Fallback like "Parameter 1", localized.
+                $lbl = get_string('paramn', 'assignsubmission_remotecheck', $i);
+            }
+            $paramlabels[$i] = $lbl;
+        }
+        // Label for the formula "Result".
+        $resultlabel = trim((string)$this->get_config('resultlabel'));
+        if ($resultlabel === '') {
+            $resultlabel = get_string('result', 'assignsubmission_remotecheck');
+        }
+
+        // --- Collect concise summary lines.
+        $lines = [];
+
+        // 1) Per-parameter checks from JSON: keys 'p1', 'p2', ...
+        if (!empty($val['paramchecks']) && is_array($val['paramchecks'])) {
+            foreach ($val['paramchecks'] as $pkey => $res) {
+                // Extract index from pN
+                if (!preg_match('/^p(\\d+)$/i', (string)$pkey, $m)) {
+                    continue;
+                }
+                $idx = (int)$m[1];
+                if ($idx < 1 || $idx > 9) {
+                    continue;
+                }
+                $label    = $paramlabels[$idx];
+                $ok       = !empty($res['ok']);
+                $student  = isset($res['student'])  ? format_float($res['student'], 6)  : '';
+                $expected = isset($res['expected']) ? format_float($res['expected'], 6) : '';
+                $delta    = isset($res['absdiff'])  ? format_float($res['absdiff'], 6)  : '';
+                $allowed  = isset($res['allowed'])  ? format_float($res['allowed'], 6)  : '';
+
+                // Example: ✅ Flow rate: 12.30 vs 12.00 (Δ=0.30 ≤ 0.50)
+                $lines[] = ($ok ? '✅ ' : '❌ ')
+                    . s($label) . ': ' . $student . ' ' . get_string('vs', 'assignsubmission_remotecheck') . ' ' . $expected
+                    . ' (' . get_string('deltaallowed', 'assignsubmission_remotecheck',
+                            (object)['delta' => $delta, 'allowed' => $allowed]) . ')';
+            }
+        }
+
+        // 2) Result (formula) check.
+        if (!empty($val['resultcheck'])) {
+            if (!empty($val['resultcheck']['error'])) {
+                $lines[] = '❌ ' . s($resultlabel) . ': '
+                    . get_string('formulaerror', 'assignsubmission_remotecheck') . ' — '
+                    . s((string)$val['resultcheck']['error']);
+            } else {
+                $r        = $val['resultcheck'];
+                $ok       = !empty($r['ok']);
+                $student  = isset($r['student'])  ? format_float($r['student'], 6)  : '';
+                $expected = isset($r['expected']) ? format_float($r['expected'], 6) : '';
+                $delta    = isset($r['absdiff'])  ? format_float($r['absdiff'], 6)  : '';
+                $allowed  = isset($r['allowed'])  ? format_float($r['allowed'], 6)  : '';
+
+                $lines[] = ($ok ? '✅ ' : '❌ ')
+                    . s($resultlabel) . ': ' . $student . ' ' . get_string('vs', 'assignsubmission_remotecheck') . ' ' . $expected
+                    . ' (' . get_string('deltaallowed', 'assignsubmission_remotecheck',
+                            (object)['delta' => $delta, 'allowed' => $allowed]) . ')';
+            }
+        }
+
+        // 3) Optional remote comparison (if present in JSON).
+        if (!empty($val['remotecompare'])) {
+            $r        = $val['remotecompare'];
+            $ok       = !empty($r['ok']);
+            $student  = isset($r['student']) ? format_float($r['student'], 6) : '';
+            $remote   = isset($r['remote'])  ? format_float($r['remote'], 6)  : '';
+            $delta    = isset($r['absdiff']) ? format_float($r['absdiff'], 6) : '';
+            $allowed  = isset($r['allowed']) ? format_float($r['allowed'], 6) : '';
+
+            $lines[] = ($ok ? '✅ ' : '❌ ')
+                . get_string('remotecompare', 'assignsubmission_remotecheck')
+                . ': ' . $student . ' ' . get_string('vs', 'assignsubmission_remotecheck') . ' ' . $remote
+                . ' (' . get_string('deltaallowed', 'assignsubmission_remotecheck',
+                        (object)['delta' => $delta, 'allowed' => $allowed]) . ')';
+        }
+
+        if (empty($lines)) {
+            // Fallback: legacy valid/invalid line.
+            $status = !empty($rec->isvalid)
+                ? get_string('valid', 'assignsubmission_remotecheck')
+                : get_string('invalid', 'assignsubmission_remotecheck');
+            return get_string('summary', 'assignsubmission_remotecheck', $status);
+        }
+
+        // Keep the summary compact; show a small number of bullets, reveal full in detail view.
+        $maxlines = 20;
+        if (count($lines) > $maxlines) {
+            $lines = array_slice($lines, 0, $maxlines);
+            $showviewlink = true;
+        }
+
+        $o = html_writer::start_tag('ul', ['class' => 'remotecheck-summarylist']);
+        foreach ($lines as $line) {
+            $o .= html_writer::tag('li', $line);
+        }
+        $o .= html_writer::end_tag('ul');
+
+        return $o;
     }
+
+    // public function view_summary(stdClass $submission, &$showviewlink) {
+    //     global $DB;
+
+    //     $showviewlink = false;
+    //     $rec = $DB->get_record('assignsubmission_remotecheck', ['submission' => $submission->id]);
+    //     if (!$rec) {
+    //         return get_string('nosubmission', 'assignsubmission_remotecheck');
+    //     }
+    //     $status = $rec->isvalid ? get_string('valid', 'assignsubmission_remotecheck') : get_string('invalid', 'assignsubmission_remotecheck');
+    //     return get_string('summary', 'assignsubmission_remotecheck', $status);
+    // }
 
     public function view(stdClass $submission) {
         global $DB;
@@ -554,7 +709,38 @@ class assign_submission_remotecheck extends assign_submission_plugin {
     public function is_enabled(): bool {
         return !empty($this->get_config('enabled'));
     }
+
+    public function supports_locking(): bool { return true; }
+
+
+    public function lock($submission, stdClass $flags) {
+        // No plugin-specific action needed; acknowledging the lock is enough.
+        return true; // Returning a value is fine; parent has no declared return type.
+    }
+
+
+    // Match core signature: unlock($submission, stdClass $flags)
+    public function unlock($submission, stdClass $flags) {
+        // No plugin-specific action needed for unlock.
+        return true;
+    }
+ 
+
+
+    // public function lock(stdClass $submission): bool { return true; }     // no-op
+    // public function unlock(stdClass $submission): bool { return true; }   // no-op
+
+    private function is_locked(?stdClass $submission): bool {
+            // Only lock when the submit-button workflow is enabled.
+            $requirebutton = !empty($this->assignment->get_instance()->submissiondrafts);
+            if (!$requirebutton) {
+                return false; // Drafts OFF: never treat as locked, even if status='submitted'.
+            }
+
+            // Locked only after the student actually submits for grading.
+            return !empty($submission)
+                && !empty($submission->status)
+                && $submission->status === 'submitted';
+            // (If status becomes 'reopened', core intends it to be editable again.)
+    }
 }
-
-
-
