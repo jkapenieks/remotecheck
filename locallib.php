@@ -89,6 +89,52 @@ class assign_submission_remotecheck extends assign_submission_plugin {
         $mform->setDefault('assignsubmission_remotecheck_table', $perinstance !== false ? $perinstance : $sitewide);
         $mform->addHelpButton('assignsubmission_remotecheck_table', 'table', 'assignsubmission_remotecheck');
 
+
+
+
+    
+        $mform->addElement('html', html_writer::empty_tag('hr'));
+
+        // We only show the link once there is a Course Module (i.e., when editing an existing assignment).
+        $cm = $this->assignment->get_course_module(false); // false = don't throw if missing
+        if ($cm && !empty($cm->id)) {
+            $context = context_module::instance($cm->id);
+
+            // Show the link only to users who have management rights for this plugin.
+            // if (has_capability('assignsubmission/remotecheck:manage', $context)) {
+                $url = new moodle_url('/mod/assign/submission/remotecheck/manage.php', [
+                    'id'      => $cm->id,    // cmid - manage.php should accept this
+                    'table' => trim((string)$this->get_config('table')), // pass the table name
+                    'sesskey' => sesskey()   // guard your actions inside manage.php with require_sesskey()
+                ]);
+
+                $linkhtml = html_writer::link(
+                    $url,
+                    get_string('managedata', 'assignsubmission_remotecheck'),
+                    ['class' => 'btn btn-secondary', 'target' => '_blank', 'rel' => 'noopener']
+                );
+
+                $mform->addElement(
+                    'static',
+                    'assignsubmission_remotecheck_managelink',
+                    get_string('remotedata', 'assignsubmission_remotecheck'), // left-hand label (optional)
+                    $linkhtml
+                );
+          //  }
+        } else {
+            // When adding a new assignment (no CM yet), show a hint to save first.
+            $hint = html_writer::span(
+                get_string('managedata_hint_savefirst', 'assignsubmission_remotecheck'),
+                'text-muted'
+            );
+            $mform->addElement('static', 'assignsubmission_remotecheck_managelink_hint', '', $hint);
+        }
+
+
+
+
+
+
         return true;
     }
 

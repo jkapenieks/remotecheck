@@ -63,3 +63,7 @@ $string['item'] = 'Selected item';
 $string['vs'] = 'vs';
 $string['deltaallowed'] = 'Δ={$a->delta} ≤ {$a->allowed}';
 $string['remotecompare'] = 'Remote comparison';
+
+$string['managedata'] = 'Manage remote data';
+$string['remotedata'] = 'Remote data';
+$string['managedata_hint_savefirst'] = 'Save this assignment first to access the data manager.';
