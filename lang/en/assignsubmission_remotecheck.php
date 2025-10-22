@@ -47,9 +47,9 @@ $string['paramlabels_help'] = 'Override the default captions shown to students f
 $string['labeln'] = 'Label for Param {$a}';
 $string['resultlabel'] = 'Result label';
 $string['paramlabel'] = 'Parameters for Remote Check plugin'; // NEW: For the table header
-$string['managebuildingdata'] = 'Manage remote building data';
+$string['managebuildingdata'] = 'Manage remote database data';
 $string['remotecheck:viewvalidation'] = 'View remote check validation details';
-$string['remotecheck:managedata']     = 'Manage remote building data';
+$string['remotecheck:managedata']     = 'Manage remote database data';
 $string['id'] = 'ID';
 
 
@@ -60,10 +60,22 @@ $string['table_help'] = 'Name of the remote table to use for this assignment. If
 $string['randomitem'] = 'Random building selection';
 $string['randomitem_desc'] = 'If enabled, a building is assigned automatically and the selector is disabled on the student form.';
 $string['item'] = 'Selected item';
+
 $string['vs'] = 'vs';
 $string['deltaallowed'] = 'Δ={$a->delta} ≤ {$a->allowed}';
 $string['remotecompare'] = 'Remote comparison';
 
+
 $string['managedata'] = 'Manage remote data';
 $string['remotedata'] = 'Remote data';
 $string['managedata_hint_savefirst'] = 'Save this assignment first to access the data manager.';
+
+$string['studentinstructions'] = 'Student instructions (shown above the submission form)';
+$string['studentinstructions_help'] = 'Optional text displayed to students at the top of the submission form.
+
+Placeholders (filled from the remote data row for the selected item):
+- {p1} … {p9} → expected parameter values (remote table columns param1..param9)
+- {result}    → expected calculated result (remote column calcresult)
+
+Example:
+"Item defaults: P1={p1}, P2={p2}. Use these to compute your answer."';

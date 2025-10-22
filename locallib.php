@@ -91,6 +91,28 @@ class assign_submission_remotecheck extends assign_submission_plugin {
 
 
 
+        // NEW: Student instructions textarea (per-assignment).
+        $mform->addElement(
+            'textarea',
+            'assignsubmission_remotecheck_studentinstructions',
+            get_string('studentinstructions', 'assignsubmission_remotecheck'),
+            ['rows' => 6, 'cols' => 80]
+        );
+        $mform->addHelpButton(
+            'assignsubmission_remotecheck_studentinstructions',
+            'studentinstructions',
+            'assignsubmission_remotecheck'
+        );
+        // Allow raw text; we will escape on output.
+        $mform->setType('assignsubmission_remotecheck_studentinstructions', PARAM_RAW);
+        $mform->setDefault(
+            'assignsubmission_remotecheck_studentinstructions',
+            (string)$this->get_config('studentinstructions')
+        );
+
+
+
+
 
     
         $mform->addElement('html', html_writer::empty_tag('hr'));
@@ -152,6 +174,14 @@ class assign_submission_remotecheck extends assign_submission_plugin {
         }
         $this->set_config('resultlabel', trim($data->assignsubmission_remotecheck_resultlabel ?? ''));
 
+
+        // NEW: Persist student instructions.
+        $this->set_config(
+            'studentinstructions',
+            trim((string)($data->assignsubmission_remotecheck_studentinstructions ?? ''))
+        );
+
+
         $table = trim($data->assignsubmission_remotecheck_table ?? '');
         $this->set_config('table', $table);
 
@@ -171,11 +201,18 @@ class assign_submission_remotecheck extends assign_submission_plugin {
         if (!$this->is_enabled()) {
             return false;
         }
-        
 
         $override = $this->repo_override();
         $repo     = new remote_repository($override);
         $addresses = $repo->list_addresses();               // [id => 'Item label', ...]
+
+
+        // NEW: Render student-facing instructions with values from the remote table.
+        $instrhtml = $this->render_student_instructions_remote($submission, $data, $repo, $addresses);
+        if ($instrhtml !== '') {
+            $mform->addElement('static', 'remotecheck_student_instructions', '', $instrhtml);
+        }
+
 
         // Use the broader 'Item' label for the UI.
         $mform->addElement('select', 'remotecheck_buildingid', get_string('item', 'assignsubmission_remotecheck'), $addresses);
@@ -789,4 +826,81 @@ public function view_summary(stdClass $submission, &$showviewlink) {
                 && $submission->status === 'submitted';
             // (If status becomes 'reopened', core intends it to be editable again.)
     }
+
+    /**
+     * Build the student instructions HTML using values from the remote database row
+     * (not from the student's current input).
+     *
+     * Placeholders supported:
+     *   {p1}..{p9}   -> remote['param1']..remote['param9']
+     *   {result}     -> remote['calcresult'] (optional; keep if useful for you)
+     *
+     * If the remote row is not available (no building resolved), placeholders remain empty.
+     */
+    private function render_student_instructions_remote(
+        ?stdClass $submission,
+        ?stdClass $data,
+        \assignsubmission_remotecheck\local\remote_repository $repo,
+        array $addresses
+    ): string {
+        global $DB, $USER;
+
+        // Fetch raw template from plugin config (per assignment).
+        $raw = (string)$this->get_config('studentinstructions');
+        $raw = trim($raw);
+        if ($raw === '') {
+            return '';
+        }
+
+        // 1) Resolve the active building id in priority order:
+        //    a) current form post/default
+        //    b) saved plugin record for this submission
+        //    c) deterministic pick if Random item is enabled
+        //    d) otherwise none (placeholders will stay blank)
+        $buildingid = null;
+
+        if (!empty($data->remotecheck_buildingid)) {
+            $buildingid = (int)$data->remotecheck_buildingid;
+        } else if (!empty($submission) && !empty($submission->id)) {
+            if ($rec = $DB->get_record('assignsubmission_remotecheck', ['submission' => $submission->id], 'buildingid')) {
+                if (!empty($rec->buildingid)) {
+                    $buildingid = (int)$rec->buildingid;
+                }
+            }
+        }
+
+        if ($buildingid === null && $this->random_item_enabled()) {
+            $assignid = $this->assignment->get_instance()->id;
+            $userid   = $USER->id;
+            // Deterministic allocation uses the same method you already have.
+            $buildingid = $this->deterministic_building_for_user($assignid, $userid, $addresses);
+        }
+
+        // 2) Load the remote row for that building (if we have one).
+        $remote = null;
+        if (!empty($buildingid)) {
+            $remote = $repo->get_row_by_id((int)$buildingid); // ['param1'=>..., 'calcresult'=>..., ...] or null
+        }
+
+        // 3) Build replacement map entirely from REMOTE values.
+        $repl = [];
+        for ($i = 1; $i <= 9; $i++) {
+            $token = '{p' . $i . '}';
+            $repl[$token] = ($remote && isset($remote['param' . $i]) && $remote['param' . $i] !== null)
+                ? (string)$remote['param' . $i]
+                : '';
+        }
+        // Optional: {result} from remote['calcresult'] if present.
+        $repl['{result}'] = ($remote && isset($remote['calcresult']) && $remote['calcresult'] !== null)
+            ? (string)$remote['calcresult']
+            : '';
+
+        // 4) Replace tokens and render safely (escape text, keep line breaks).
+        $filled = strtr($raw, $repl);
+        $safe   = nl2br(s($filled));
+
+        return html_writer::div($safe, 'remotecheck-student-instructions');
+
+    }
+
 }
